@@ -1,0 +1,38 @@
+name: Verify source transport repair
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/repair-transport.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Repair known transcription errors and verify original blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import base64, hashlib, json, os, pathlib, urllib.request
+          req = urllib.request.Request('https://api.github.com/repos/wieslawsoltes/Veyra/git/blobs/6cf2cef104a611067587f11f0840db37035c0b74', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+          with urllib.request.urlopen(req) as response:
+              blob = json.load(response)
+          text = base64.b64encode(base64.b64decode(blob['content'])).decode()
+          for wrong, correct in [('PudPTP05', 'PudPT05'), ('VoKQ5KU8', 'VoKQ4KU8'), ('KMGsNQLng', 'KMGsNLng')]:
+              assert text.count(wrong) == 1, wrong
+              text = text.replace(wrong, correct)
+          data = base64.b64decode(text, validate=True)
+          digest = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          print('Repaired block length:', len(data), 'Git blob SHA:', digest)
+          assert digest == 'be03430cf7b25db6c9ed82c6f19bd660346f3064', 'Repaired bytes must match the original exactly'
+          pathlib.Path('.source-import/part-018.xz-part').write_bytes(data)
+      - name: Commit verified transport block
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .source-import/part-018.xz-part
+          git diff --cached --quiet || git commit -m 'build: recover checksum-verified source block 18'
+          git push origin HEAD:main
