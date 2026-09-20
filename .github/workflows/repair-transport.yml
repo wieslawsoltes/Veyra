@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Repair known transcription errors and verify original blob
+      - name: Repair transcription errors and verify original blob
         env:
           GH_TOKEN: ${{ github.token }}
         shell: python
         run: |
-          import base64, hashlib, json, os, pathlib, urllib.request
+          import base64, hashlib, json, os, pathlib, urllib.request, zlib
           req = urllib.request.Request('https://api.github.com/repos/wieslawsoltes/Veyra/git/blobs/6cf2cef104a611067587f11f0840db37035c0b74', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
           with urllib.request.urlopen(req) as response:
               blob = json.load(response)
@@ -24,7 +24,28 @@ jobs:
           for wrong, correct in [('PudPTP05', 'PudPT05'), ('VoKQ5KU8', 'VoKQ4KU8'), ('KMGsNQLng', 'KMGsNLng')]:
               assert text.count(wrong) == 1, wrong
               text = text.replace(wrong, correct)
-          data = base64.b64decode(text, validate=True)
+          expected = ['3197da8b', '2772c7ef', 'a38692b8', '62544ebf', '960a5f5e', 'cf6542f9', 'e025a021', '2d623a4f', '0807cd45', '1e839bbc', '736eb242', '671c1165', 'a8f7c459', 'e560b149', '873036bf', '813f1ea8', '067810ec', '80db42d8', '8a3f478f', 'fc2f2cfb', '434da0ae', '3c97c98f', '73c4b0ce', 'f5c0b522', 'e69d4761', '25629ce1', 'cbbb71ad', 'db635b53', 'a127a2df', '36cac273', '97dfe98b', '90b4c637', '1f209dde', 'edf95563', 'e6e9fe22', '6cba0b01', '44f8aaff', 'a1ca58d7', 'd3f1eceb', 'cfe338b2', 'ccd91e43', '6209a974', '2400dfb8', '2efb4866', '8b4e269c', 'b00ccd57', 'ebeabd29', 'a9a33ce9', '3afc9131', '14475fac', 'c5ea4ca5', '4bd5e05a', '3b28d334', '2fd644b8', '4209a7a2', '45c43786', '2017eb9a', 'ec8fffb4', 'c2fbd246', 'dbf17ba3', 'fe10556e', '085efefc', '38070892', 'ce9749ab']
+          assert len(text) == len(expected) * 256
+          alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+          fixed = []
+          for index, target in enumerate(expected):
+              segment = text[index*256:(index+1)*256]
+              if f'{zlib.crc32(segment.encode()):08x}' != target:
+                  matches = []
+                  for position in range(256):
+                      for character in alphabet:
+                          if character == segment[position]:
+                              continue
+                          candidate = segment[:position] + character + segment[position+1:]
+                          if f'{zlib.crc32(candidate.encode()):08x}' == target:
+                              matches.append(candidate)
+                  print('Segment', index, 'unique repair candidates:', len(matches))
+                  if len(matches) != 1:
+                      print('UNREPAIRED', index, segment)
+                      raise RuntimeError('Transport needs an exact replacement segment')
+                  segment = matches[0]
+              fixed.append(segment)
+          data = base64.b64decode(''.join(fixed), validate=True)
           digest = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
           print('Repaired block length:', len(data), 'Git blob SHA:', digest)
           assert digest == 'be03430cf7b25db6c9ed82c6f19bd660346f3064', 'Repaired bytes must match the original exactly'
