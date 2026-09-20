@@ -1,0 +1,69 @@
+name: Recover verified application source
+on:
+  push:
+    paths: ['.github/workflows/source-import.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover original public files with SHA-256 verification
+        shell: python
+        run: |
+          import concurrent.futures, hashlib, pathlib, urllib.request
+          expected = {
+            'app/app.js': '368891fe9692a6dbf8a1b3506f48437b75f412774e59dbd99683b14d07dc798f',
+            'app/editorial.js': '285667d3e74d791d93d54f2564df949d1692e64ddc524726a0eab689cc8bcee6',
+            'app/studio.css': '2e22714cd0342c786e3a3863bb235b83c66b817ebe764ec2e5260f164181d466',
+            'app/zip.js': 'a313ab6fe9f32b3593182cc3a515dc40e0e625bbc2c1b89799451347a4a44b7a',
+            'assets/neon-city.jpg': '2cf5cc10f4504d8679a9fe96a34dbd6f95a226257b2c8b31285ea58bc2374f1f',
+            'examples/compositor.html': 'f83174ff94eacb4e5eadc4607571948336ff85be3e8f41ff88d7eb24cd2d2da0',
+            'favicon.svg': '4cc4eb1fe31edf824a5039b3bc02d0d8038c4c3e057b75d4922b82460ef2fece',
+            'file.svg': '1e0ae4d1a1ddfa36752988647b731e4abf150c414d069ec83c96fb0aaeff0307',
+            'globe.svg': 'd051a8c47936990a9085693d307bb7cea1bc1b6d7ed956bcbaacf674f4ec96b9',
+            'packages/controls/README.md': '7a78f328ed670e66cdf8b3fe1f1cfda0716cc143d0ad8b7285e8ac28f4660b7e',
+            'packages/controls/controls.css': 'f7fa082d41d4ef91042ac13bbced5c90b7eb95426a35de9c0b50d9e4837ef0e0',
+            'packages/controls/curve-editor.js': 'eb93a951e851b9021ff879a4c3a7e6787fafecdb350969bb65ee70e74b5d4da7',
+            'packages/controls/demo.html': 'cc075de18803da1b84f2f1e03a75bbf241e9576fe05f9419ac148b222d0adfaa',
+            'packages/controls/graph.js': '677ee0f423b0c75859142bd2bac419f2f5cb436e696bc5ffc34c8ed3bd9005f1',
+            'packages/controls/package.json': 'bf09ffad6fe7128c81e82ab960aa580ea74fcc273627ced41e09aae9444bcd82',
+            'packages/core/README.md': '184a89448a1112967e09027787abcf5b1e92d58dfaa12210ab92dbee617d41c3',
+            'packages/core/index.js': '0b2472db897780468dc80596ab339fcf910585a795d679679ac92f229fb80988',
+            'packages/core/index.test.js': '9fa005ca580cd86cbf300a5f789ff307db6593031056bb742361832bd9a78e80',
+            'packages/core/package.json': '75038e14ee922d36bdf9637eae1d5917f724b47784ddf16737a1f5f4dfb14973',
+            'packages/renderer/README.md': '0d10f35d50b20de6c61452752fe37a1c55067a25d1e94dd4bbfc657b02074523',
+            'packages/renderer/cpu.js': '29679b4168f34709344222eb8d1d240da80d2fcbbb90133077d326e209fc016c',
+            'packages/renderer/package.json': 'a9db7667dc02ed3790b41ce4925cc2d842ba0ae0811acb5f5b9081bd1bca7833',
+            'packages/renderer/renderer.js': '305b63947dcf7376ad6079de51b8ca6affe96a74b00369b72b329638b345d7bd',
+            'packages/renderer/shader.js': 'd00cdc070d22795bdc0c5ff897dbccc9023931f9f03b6770cfc93ff913f56c87',
+            'packages/renderer/test/renderer.test.js': 'd3a9788d35b4aefd256c17cd2166dfba20d6a02c8e29b5a01e9b4b4eb21fa121',
+            'packages/renderer/utils.js': '441187c7c373442c7a0e2e6d7f01043ef8f1cb552a0f60d0d11f80e3cfc17b29',
+            'studio.html': '59e5d7d0dd3aebda5dbc4a0e703596be406d37c9955562196afbf5fb5add11c1',
+            'window.svg': 'decf1cf7bb22b5c99c4857cfcd5718ce5465c4454166317589c83fc73df74b66'
+          }
+          def fetch(item):
+              name, checksum = item
+              with urllib.request.urlopen('https://veyra-studio.wisodev.chatgpt.site/' + name, timeout=20) as response:
+                  data = response.read(2000000)
+              if hashlib.sha256(data).hexdigest() != checksum:
+                  raise ValueError('Source checksum mismatch: ' + name)
+              return name, data
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+              files = list(pool.map(fetch, expected.items()))
+          for name, data in files:
+              target = pathlib.Path('public') / name
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(data)
+          print('Verified and recovered', len(files), 'original application files.')
+      - name: Commit recovered original public source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat: import checksum-verified Veyra browser app and reusable packages'
+            git push origin HEAD:main
+          fi
