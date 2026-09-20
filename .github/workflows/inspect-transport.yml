@@ -1,0 +1,32 @@
+name: Inspect source transport
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-transport.yml', '.source-import/check.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Record transported file hashes
+        shell: python
+        run: |
+          import hashlib, json, pathlib
+          root = pathlib.Path('.source-import')
+          report = []
+          for path in sorted(root.glob('part-*.xz-part')):
+              data = path.read_bytes()
+              report.append({'name': path.name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'blob': hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()})
+          pathlib.Path('transport-report.json').write_text(json.dumps(report, indent=2))
+          print('Transported file count:', len(report))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-transport-inspection
+          path: |
+            .source-import/part-*.xz-part
+            transport-report.json
+          include-hidden-files: true
+          retention-days: 1
