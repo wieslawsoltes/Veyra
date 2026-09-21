@@ -1,0 +1,37 @@
+name: Verify Veyra
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm test
+      - run: node standalone/server.mjs --check
+      - run: node --check public/app/app.js && node --check public/app/browser-storage.js
+      - run: npm pack --dry-run
+        working-directory: public/packages/core
+      - run: npm pack --dry-run
+        working-directory: public/packages/renderer
+      - run: npm pack --dry-run
+        working-directory: public/packages/controls
+      - run: npm run build:pages
+      - run: python3 -m pip install playwright==1.57.0
+      - run: python3 -m playwright install --with-deps chromium
+      - run: python3 tests/browser-pages.py --managed-browser --screenshot pages-smoke.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-smoke
+          path: pages-smoke.png
+          if-no-files-found: ignore
