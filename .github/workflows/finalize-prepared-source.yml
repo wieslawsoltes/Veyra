@@ -18,6 +18,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          package-manager-cache: false
       - name: Apply verified prepared-source changes and create final inventory
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,8 +42,8 @@ jobs:
           for name, expected in checks.items():
               assert digest(pathlib.Path(name).read_bytes()) == expected, 'Prepared source mismatch: ' + name
           workflows = {
-              '.github/workflows/ci.yml': '947dabeb1ee07896c31dd2e273081d5377902406',
-              '.github/workflows/pages.yml': 'd1ce1ebe858153ae49aedc726bab3df9c914b9e1',
+              '.github/workflows/ci.yml': '3222d630608aa50774460169687621428a4afcc0',
+              '.github/workflows/pages.yml': '87c1a0e7d85d0ab2c62e6032263f3f599ae81cf9',
           }
           for name, sha in workflows.items():
               request = urllib.request.Request('https://api.github.com/repos/wieslawsoltes/Veyra/git/blobs/' + sha, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
