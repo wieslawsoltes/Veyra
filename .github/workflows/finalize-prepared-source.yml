@@ -1,0 +1,100 @@
+name: Finalize prepared Veyra source
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/finalize-prepared-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: source-import
+  cancel-in-progress: false
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Apply verified prepared-source changes and create final inventory
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import base64, hashlib, json, os, pathlib, subprocess, urllib.request
+          def digest(data):
+              return hashlib.sha256(data).hexdigest()
+          patch = pathlib.Path('.source-import/final-docs.patch')
+          assert digest(patch.read_bytes()) == '02143cb29afc9377e91b872b6da9202989cda8e33b05108d3f5fed52ca8d014d'
+          subprocess.run(['git', 'apply', '--check', str(patch)], check=True)
+          subprocess.run(['git', 'apply', str(patch)], check=True)
+          checks = {
+              'scripts/publish-github.mjs': 'cc8bffd2974d4d2a1196193ec25c609ddf15df44819954c3cd07472fe03415c7',
+              'tests/publish.test.mjs': 'a41ce160dde3ec806446ffd16e434d6980d78d0327a8822918da2c65d22c474d',
+              'README.md': '43dca18e8802a8c63bc4a3d2b63bcc96026a5d72877fa1494ec6da72e57eae2e',
+              'docs/GITHUB-PAGES.md': 'fa822ef98c2d4a254a4bd800d4b09dd5abee24beee11973f7454eaf8b533894f',
+              'docs/QUALITY.md': 'e13f735244da58f09f52ad47e809012ddb82317f9e4c2120c7eb08f83107c632',
+              'tests/browser-pages.py': 'fbbb5a5813a69421d477fb8e15560220211044aa097b3b98d0819f0e8562afdd',
+          }
+          for name, expected in checks.items():
+              assert digest(pathlib.Path(name).read_bytes()) == expected, 'Prepared source mismatch: ' + name
+          workflows = {
+              '.github/workflows/ci.yml': '947dabeb1ee07896c31dd2e273081d5377902406',
+              '.github/workflows/pages.yml': 'd1ce1ebe858153ae49aedc726bab3df9c914b9e1',
+          }
+          for name, sha in workflows.items():
+              request = urllib.request.Request('https://api.github.com/repos/wieslawsoltes/Veyra/git/blobs/' + sha, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  data = base64.b64decode(json.load(response)['content'])
+              assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == sha
+              pathlib.Path(name).write_bytes(data)
+          readme = pathlib.Path('README.md')
+          readme.write_text(readme.read_text().replace('Target GitHub Pages address (not yet verified live):', 'GitHub Pages address:'))
+          pages_doc = pathlib.Path('docs/GITHUB-PAGES.md')
+          text = pages_doc.read_text().replace('Target site address (publication must be verified):', 'GitHub Pages address:')
+          text = text.replace('It has not been executed against GitHub from the\npreparation environment: the available GitHub connector exposes reads but no\nwrite actions, and direct Git network access failed DNS resolution.', 'The original preparation environment could not publish it. On September 21, 2026,\nthe complete source archive was verified and committed through GitHub Actions.\nThe CLI publisher remains available for authenticated development machines;\nits end-to-end CLI path is separate from the connector-based publication.')
+          text += '\n## Live publication verification\n\nThe Pages workflow requires browser checks before deployment, then checks the\nlive deployment.json commit and reruns the browser suite against the public URL.\nUse the latest successful Publish GitHub Pages run as the publication record.\nA URL alone or a successful source import is not a deployment verification.\n'
+          pages_doc.write_text(text)
+          quality = pathlib.Path('docs/QUALITY.md')
+          quality.write_text(quality.read_text() + '\n## GitHub source recovery (2026-09-21)\n\nAll 58 source blocks passed their original Git hashes and the assembled archive\npassed SHA-256 verification. The complete application was committed as\n`f42fa06a16e555c560cfd36773dedde5c4cd161a`. The prepared publisher and its 15\nregression tests are retained. The earlier no-write and browser-policy notes\nabove describe the September 20 preparation session, not current GitHub access.\nCI and Pages run the managed Chromium checks as mandatory gates. Consult their\nactual results for browser and live-publication status. Headless software\nrendering is not physical-GPU or production-scale qualification.\n')
+          release = pathlib.Path('release')
+          release.mkdir(exist_ok=True)
+          (release / 'RECOVERY.md').write_text('# Verified source recovery\n\nThe complete 149-file prepared archive was recovered and committed on GitHub as\n`f42fa06a16e555c560cfd36773dedde5c4cd161a` on September 21, 2026.\nAll 58 binary blocks and the complete archive checksum were verified before\nextraction. Client, server, reusable libraries, media, tests and documentation\nare retained, together with the later publisher and deployment fixes.\n\nThe original local Git bundle is a historical recovery snapshot, not a\nreplacement for remote history. No force push is required.\n\nRun `node scripts/publish-github.mjs --check` to validate the source inventory\nand local tests. See `docs/GITHUB-PAGES.md` for deployment instructions.\nThe Pages workflow checks both the built application and the actual public\nsite; use the successful workflow and matching deployment.json as evidence.\nPages stores projects and media in browser-local IndexedDB. Server-backed\ncollaboration requires the separately deployed backend.\n')
+          report = {
+              'date': '2026-09-21', 'repository': 'wieslawsoltes/Veyra',
+              'original_archive': {'name': 'veyra-final.tar.xz', 'entries': 149, 'bytes': 710984, 'verified_blocks': 58, 'sha256': 'dfa73760f113cb3c76bc8dbfed35fde078acdc1eb49e846b7499a7ea1774a5fd'},
+              'source_import': {'status': 'succeeded', 'commit': 'f42fa06a16e555c560cfd36773dedde5c4cd161a', 'workflow_run': 35598721142},
+              'prepared_source_validation': {'node_tests_passed': 93, 'control_assertions_passed': 28, 'sqlite_startup': 'passed', 'static_build': 'passed'},
+              'browser_and_live_publication': 'Required gates in .github/workflows/pages.yml; inspect the run for this commit',
+              'storage': 'browser-local IndexedDB on Pages; server backend retained separately',
+              'cli_publisher_end_to_end': 'not_executed', 'hardware_gpu_testing': 'not_performed'
+          }
+          (release / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
+          pathlib.Path('scripts/publish-github.mjs').chmod(0o755)
+          names = set(subprocess.check_output(['git', 'ls-files', '-z']).decode().strip('\0').split('\0'))
+          names.update(workflows)
+          names.update(['release/RECOVERY.md', 'release/verification.json'])
+          names = sorted(n for n in names if n and not n.startswith('.source-import/') and (not n.startswith('.github/workflows/') or n in workflows) and n != 'release/source-manifest.json')
+          assert len(names) == 153, 'Unexpected final source inventory: ' + str(len(names))
+          entries = []
+          for name in names:
+              path = pathlib.Path(name)
+              assert path.is_file() and not path.is_symlink()
+              entries.append({'path': name, 'sha256': digest(path.read_bytes()), 'mode': 493 if name == 'scripts/publish-github.mjs' else 420})
+          manifest = {'version': 1, 'repository': 'wieslawsoltes/Veyra', 'baseCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'files': entries}
+          (release / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          stage = [name for name in names if not name.startswith('.github/workflows/')]
+          stage.append('release/source-manifest.json')
+          subprocess.run(['git', 'add', '--', *stage], check=True)
+          print('Prepared source checksums verified; final inventory:', len(entries))
+      - name: Verify final source, tests, SQLite and static build
+        run: node scripts/publish-github.mjs --check
+      - name: Commit prepared source without modifying workflow permissions
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --quiet || git commit -m 'build: finalize prepared source with verified publisher, documentation and browser checks'
+          git push origin HEAD:main
+          git rev-parse HEAD
