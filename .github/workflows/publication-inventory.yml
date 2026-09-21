@@ -1,0 +1,34 @@
+name: Publication source inventory
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publication-inventory.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Inventory source transport and repository revision
+        shell: python
+        run: |
+          import hashlib, json, pathlib, subprocess
+          root = pathlib.Path('.source-import')
+          files = []
+          for p in sorted(root.rglob('*')):
+              if p.is_file():
+                  b = p.read_bytes()
+                  files.append({'path':p.as_posix(), 'size':len(b), 'sha256':hashlib.sha256(b).hexdigest()})
+          report = {'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(), 'files':files}
+          pathlib.Path('source-inventory.json').write_text(json.dumps(report, indent=2)+'\n')
+          print(json.dumps(report, indent=2))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: publication-source-inventory
+          path: |
+            .source-import/
+            source-inventory.json
+          include-hidden-files: true
+          retention-days: 2
