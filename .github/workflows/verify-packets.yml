@@ -1,0 +1,31 @@
+name: Verify source packets
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.source-import/retry-*.txt'
+      - '.source-import/verify_packets.py'
+      - '.github/workflows/verify-packets.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: verify-source-packets
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Recover only exact original source bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .source-import/verify_packets.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: packet-verification
+          path: packet-verification.json
+          if-no-files-found: error
+          retention-days: 7
