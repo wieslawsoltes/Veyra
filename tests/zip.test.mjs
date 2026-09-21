@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createZip,crc32} from '../public/app/zip.js';
+test('ZIP emits correct signatures, lengths and known CRC',async()=>{const data=new TextEncoder().encode('123456789');assert.equal(crc32(data),0xcbf43926);const blob=createZip([{name:'frame.png',data}]);const bytes=await blob.arrayBuffer(),v=new DataView(bytes);assert.equal(v.getUint32(0,true),0x04034b50);assert.equal(v.getUint32(14,true),0xcbf43926);assert.equal(v.getUint32(bytes.byteLength-22,true),0x06054b50);assert.equal(v.getUint16(bytes.byteLength-12,true),1);});
+test('ZIP rejects traversal paths',()=>assert.throws(()=>createZip([{name:'../bad',data:new Uint8Array()}])));

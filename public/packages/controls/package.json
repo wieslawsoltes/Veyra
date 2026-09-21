@@ -1,0 +1,17 @@
+{
+  "name": "veyra-compositing-controls",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./graph": "./graph.js",
+    "./curve-editor": "./curve-editor.js",
+    "./controls.css": "./controls.css"
+  },
+  "license": "MIT",
+  "files": [
+    "*.js",
+    "*.css",
+    "README.md",
+    "demo.html"
+  ]
+}

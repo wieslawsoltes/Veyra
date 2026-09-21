@@ -1,0 +1,72 @@
+/** Framework-neutral fetch handler. Bind DB (D1-compatible SQLite) and BUCKET (R2-compatible object store). */
+const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+const fail=(status,message)=>{throw Object.assign(new Error(message),{status})};
+const uid=()=>crypto.randomUUID();
+const clean=(s,max=160)=>String(s??'').trim().slice(0,max);
+const idPattern=/^[a-zA-Z0-9_-]{1,100}$/;
+async function body(req,max=3_000_000){const t=await req.text();if(t.length>max)fail(413,'Request is too large.');try{return JSON.parse(t)}catch{fail(400,'Invalid JSON.')}}
+const sha=async t=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+function user(req,env){const id=req.headers.get('oai-authenticated-user-id');const email=req.headers.get('oai-authenticated-user-email');if(id)return {id,email:email||'Studio member'};if(env.LOCAL_DEVELOPMENT===true)return {id:'local-studio-user',email:'Local artist'};fail(401,'Sign in to save projects and collaborate.');}
+async function statement(env,sql,...params){return env.DB.prepare(sql).bind(...params)}
+async function first(env,sql,...params){return (await statement(env,sql,...params)).first()}
+async function all(env,sql,...params){return (await (await statement(env,sql,...params)).all()).results||[]}
+async function run(env,sql,...params){return (await statement(env,sql,...params)).run()}
+async function member(env,pid,u,write=false,owner=false){const m=await first(env,'SELECT * FROM members WHERE project_id=? AND user_id=?',pid,u.id);if(!m)fail(404,'Project was not found or is not shared with you.');if(owner&&m.role!=='owner')fail(403,'Only the project owner can do this.');if(write&&!['owner','editor'].includes(m.role))fail(403,'Reviewers can add notes; an editor role is required to change the project.');return m;}
+const allowedTypes=new Set(['Source','Constant','Grade','Blur','Transform','Merge','ChromaKey','Roto','Glow','Noise','Vignette','Sharpen','Invert','Crop','Premultiply','Unpremultiply','ColorMatrix','Text','Viewer']);
+export function validateState(state){
+ if(!state||typeof state!=='object'||Array.isArray(state))fail(400,'A project object is required.');
+ for(const k of ['width','height'])if(!Number.isInteger(state[k])||state[k]<16||state[k]>4096)fail(400,'Project dimensions must be between 16 and 4096.');
+ if(!Number.isFinite(state.fps)||state.fps<1||state.fps>120||!Number.isInteger(state.duration)||state.duration<1||state.duration>1_000_000)fail(400,'Invalid frame rate or duration.');
+ if(!Array.isArray(state.nodes)||state.nodes.length>300||!Array.isArray(state.assets)||state.assets.length>200)fail(400,'Project limit: 300 nodes and 200 assets.');
+ const ids=new Set(); for(const n of state.nodes){if(!n||typeof n!=='object'||!idPattern.test(n.id)||ids.has(n.id)||!allowedTypes.has(n.type)||!Array.isArray(n.inputs)||n.inputs.length>4)fail(400,'Invalid node or duplicate identifier.');ids.add(n.id)}
+ const ns=new Map(state.nodes.map(n=>[n.id,n]));const done=new Set(),active=new Set();function walk(id){if(done.has(id))return;if(active.has(id))fail(400,'The graph contains a cycle.');active.add(id);for(const source of ns.get(id).inputs){if(source!=null){if(!ns.has(source))fail(400,'A graph connection is missing its source.');walk(source)}}active.delete(id);done.add(id)}for(const id of ids)walk(id);
+ if(state.viewerNodeId&&!ids.has(state.viewerNodeId))fail(400,'Viewer node does not exist.');
+ for(const asset of state.assets){if(!asset||typeof asset!=='object'||!idPattern.test(asset.id))fail(400,'Invalid asset identifier.');if(typeof asset.url!=='string'||!asset.url.startsWith('/')||asset.url.startsWith('//'))fail(400,'Project media must be uploaded to this server.');}
+ const str=JSON.stringify(state);if(str.length>2_500_000)fail(413,'Project exceeds the 2.5 MB document limit.');return str;
+}
+export async function handleAPI(req,env){
+ try{
+ const url=new URL(req.url);const path=url.pathname.replace(/^\/api\/?/,'').split('/').filter(Boolean);const method=req.method;
+ if(method!=='GET'&&method!=='HEAD'){const origin=req.headers.get('origin');if(origin&&origin!==url.origin)fail(403,'Cross-origin writes are not allowed.');}
+ const u=user(req,env);if(path[0]==='session')return json({user:u,storage:!!env.DB&&!!env.BUCKET});
+ if(!env.DB)fail(503,'Project storage is unavailable. Your current edits are still open; export a project backup.');
+ if(path[0]==='join'&&method==='POST'){const b=await body(req,2000),token=clean(b.token,150);const invite=await first(env,'SELECT * FROM invites WHERE token_hash=? AND expires_at>?',await sha(token),Date.now());if(!invite)fail(404,'This invite has expired or was revoked.');await run(env,'INSERT INTO members(project_id,user_id,email,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(project_id,user_id) DO NOTHING',invite.project_id,u.id,u.email,invite.role,Date.now());return json({projectId:invite.project_id});}
+ if(path[0]==='assets'&&path[1]&&method==='GET'){
+  const a=await first(env,'SELECT * FROM assets WHERE id=?',path[1]);if(!a)fail(404,'Media not found.');await member(env,a.project_id,u);if(!env.BUCKET)fail(503,'Media storage unavailable.');const range=req.headers.get('range');let opts;
+  if(range){const m=/^bytes=(\d+)-(\d*)$/.exec(range);if(m){const offset=Number(m[1]),end=m[2]?Number(m[2]):a.size-1;if(offset>=a.size||end<offset)return new Response(null,{status:416,headers:{'Content-Range':`bytes */${a.size}`}});opts={range:{offset,length:Math.min(end,a.size-1)-offset+1}}}}
+  const obj=await env.BUCKET.get(a.object_key,opts);if(!obj)fail(404,'Media bytes not found.');const h={'Content-Type':a.mime,'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff','Accept-Ranges':'bytes'};if(opts){h['Content-Range']=`bytes ${opts.range.offset}-${opts.range.offset+opts.range.length-1}/${a.size}`;h['Content-Length']=String(opts.range.length)}else h['Content-Length']=String(a.size);return new Response(obj.body,{status:opts?206:200,headers:h});
+ }
+ if(path[0]!=='projects')fail(404,'Unknown endpoint.');
+ if(path.length===1){
+ if(method==='GET')return json({projects:await all(env,'SELECT p.id,p.name,p.revision,p.updated_at,m.role FROM projects p JOIN members m ON p.id=m.project_id WHERE m.user_id=? ORDER BY p.updated_at DESC LIMIT 100',u.id)});
+ if(method==='POST'){const b=await body(req),state=b.state,str=validateState(state),id=uid(),now=Date.now();state.id=id;const serialized=JSON.stringify(state);const owned=await first(env,'SELECT count(*) AS n FROM projects WHERE owner_id=?',u.id);if(owned.n>=100)fail(409,'Project limit reached (100).');await env.DB.batch([env.DB.prepare('INSERT INTO projects(id,name,owner_id,state,revision,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,clean(state.name)||'Untitled',u.id,serialized,now,now),env.DB.prepare('INSERT INTO members(project_id,user_id,email,role,joined_at) VALUES(?,?,?,?,?)').bind(id,u.id,u.email,'owner',now),env.DB.prepare('INSERT INTO versions(id,project_id,revision,state,author,label,created_at) VALUES(?,?,1,?,?,?,?)').bind(uid(),id,serialized,u.email,'Project created',now)]);return json({id,state,revision:1,role:'owner'},201);}
+ fail(405,'Method not supported.');}
+ const pid=path[1];const m=await member(env,pid,u);const sub=path[2];
+ if(!sub){if(method==='GET'){const p=await first(env,'SELECT * FROM projects WHERE id=?',pid);return json({id:pid,state:JSON.parse(p.state),revision:p.revision,role:m.role,updatedAt:p.updated_at})}
+ if(method==='PUT'){await member(env,pid,u,true);const b=await body(req);const s=validateState(b.state);if(!Number.isInteger(b.revision))fail(400,'A base revision is required.');const now=Date.now();const res=await run(env,'UPDATE projects SET name=?,state=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?',clean(b.state.name)||'Untitled',s,now,pid,b.revision);if(!res.meta?.changes){const p=await first(env,'SELECT state,revision FROM projects WHERE id=?',pid);return json({error:'The shared project changed. Merge or reload before saving.',state:JSON.parse(p.state),revision:p.revision},409)}return json({revision:b.revision+1,updatedAt:now});}
+ if(method==='DELETE'){await member(env,pid,u,false,true);const as=await all(env,'SELECT object_key FROM assets WHERE project_id=?',pid);if(env.BUCKET)for(const a of as)await env.BUCKET.delete(a.object_key);await run(env,'DELETE FROM projects WHERE id=?',pid);return json({deleted:true})}fail(405,'Method not supported.');}
+ if(sub==='versions'){
+ if(method==='GET'&&!path[3])return json({versions:await all(env,'SELECT id,revision,author,label,created_at FROM versions WHERE project_id=? ORDER BY created_at DESC LIMIT 100',pid)});
+ if(method==='GET'&&path[3]){const v=await first(env,'SELECT * FROM versions WHERE id=? AND project_id=?',path[3],pid);if(!v)fail(404,'Version not found.');return json({state:JSON.parse(v.state),revision:v.revision,label:v.label});}
+ if(method==='POST'){await member(env,pid,u,true);const b=await body(req,3000),p=await first(env,'SELECT state,revision FROM projects WHERE id=?',pid),id=uid();await run(env,'INSERT INTO versions(id,project_id,revision,state,author,label,created_at) VALUES(?,?,?,?,?,?,?)',id,pid,p.revision,p.state,u.email,clean(b.label)||`Revision ${p.revision}`,Date.now());return json({id,revision:p.revision},201);}
+ }
+ if(sub==='comments'){
+ if(method==='GET')return json({comments:await all(env,'SELECT * FROM comments WHERE project_id=? ORDER BY created_at DESC LIMIT 500',pid)});
+ if(method==='POST'){const b=await body(req,100_000);const txt=clean(b.body,4000);if(!txt)fail(400,'Write a review note.');if(!Number.isInteger(b.frame)||b.frame<0||b.frame>1_000_000)fail(400,'Invalid review frame.');const drawing=JSON.stringify(b.drawing||[]);if(drawing.length>70_000)fail(400,'Annotation is too large.');const id=uid();await run(env,'INSERT INTO comments(id,project_id,author_id,author,body,frame,drawing,resolved,created_at) VALUES(?,?,?,?,?,?,?,0,?)',id,pid,u.id,u.email,txt,b.frame,drawing,Date.now());return json({id},201);}
+ if((method==='PATCH'||method==='DELETE')&&path[3]){const c=await first(env,'SELECT * FROM comments WHERE id=? AND project_id=?',path[3],pid);if(!c)fail(404,'Note not found.');if(method==='DELETE'){if(c.author_id!==u.id&&m.role!=='owner')fail(403,'Only the author or project owner can delete a note.');await run(env,'DELETE FROM comments WHERE id=?',c.id);}else{const b=await body(req,1000);await run(env,'UPDATE comments SET resolved=? WHERE id=?',b.resolved?1:0,c.id)}return json({ok:true});}
+ }
+ if(sub==='members'){
+ if(method==='GET')return json({members:await all(env,'SELECT user_id,email,role,joined_at FROM members WHERE project_id=?',pid),presence:await all(env,'SELECT user_id,name,frame,updated_at FROM presence WHERE project_id=? AND updated_at>?',pid,Date.now()-20_000)});
+ if(method==='PATCH'&&path[3]){await member(env,pid,u,false,true);const b=await body(req,1000);if(!['editor','reviewer'].includes(b.role))fail(400,'Invalid role.');await run(env,"UPDATE members SET role=? WHERE project_id=? AND user_id=? AND role!='owner'",b.role,pid,path[3]);return json({ok:true});}
+ if(method==='DELETE'&&path[3]){await member(env,pid,u,false,true);await run(env,"DELETE FROM members WHERE project_id=? AND user_id=? AND role!='owner'",pid,path[3]);return json({ok:true});}
+ }
+ if(sub==='presence'&&method==='POST'){const b=await body(req,1000);const frame=Math.max(0,Math.min(1e6,Math.floor(Number(b.frame)||0)));await run(env,'INSERT INTO presence(project_id,user_id,name,frame,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(project_id,user_id) DO UPDATE SET name=excluded.name,frame=excluded.frame,updated_at=excluded.updated_at',pid,u.id,u.email,frame,Date.now());return json({presence:await all(env,'SELECT user_id,name,frame,updated_at FROM presence WHERE project_id=? AND updated_at>?',pid,Date.now()-20_000)});}
+ if(sub==='invite'){
+ await member(env,pid,u,false,true);if(method==='POST'){const b=await body(req,1000);if(!['editor','reviewer'].includes(b.role))fail(400,'Choose editor or reviewer for the invite.');const role=b.role,token=uid()+uid();await run(env,'INSERT INTO invites(token_hash,project_id,role,expires_at) VALUES(?,?,?,?)',await sha(token),pid,role,Date.now()+7*86400_000);return json({token,role,expiresInDays:7});}if(method==='DELETE'){await run(env,'DELETE FROM invites WHERE project_id=?',pid);return json({revoked:true});}
+ }
+ if(sub==='assets'&&method==='POST'){
+ await member(env,pid,u,true);if(!env.BUCKET)fail(503,'Media storage is unavailable.');const mime=req.headers.get('content-type')?.split(';')[0];const allowed=/^(image\/(png|jpeg|webp|gif|avif)|video\/(mp4|webm|quicktime|ogg)|audio\/(mpeg|mp4|wav|x-wav|webm|ogg|flac))$/;if(!allowed.test(mime))fail(415,'Import PNG, JPEG, WebP, GIF, AVIF, MP4, WebM, MOV, OGG, WAV, MP3 or FLAC media.');const size=Number(req.headers.get('content-length')||0);if(size>50*1024*1024)fail(413,'Media limit is 50 MB per file.');const count=await first(env,'SELECT count(*) as n,sum(size) AS total FROM assets WHERE project_id=?',pid);if(count.n>=200||(count.total||0)+size>1024*1024*1024)fail(413,'Project media limit reached (200 files / 1 GB).');const bytes=await req.arrayBuffer();if(bytes.byteLength>50*1024*1024)fail(413,'Media limit is 50 MB per file.');const id=uid(),key=`${pid}/${id}`,name=clean(decodeURIComponent(req.headers.get('x-file-name')||'Untitled media'),200);await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:mime}});try{const inserted=await run(env,'INSERT INTO assets(id,project_id,name,mime,size,object_key,created_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM assets WHERE project_id=?) < 200 AND (SELECT coalesce(sum(size),0) FROM assets WHERE project_id=?) + ? <= ?',id,pid,name,mime,bytes.byteLength,key,Date.now(),pid,pid,bytes.byteLength,1024*1024*1024);if(!inserted.meta?.changes)fail(413,'Project media limit reached (200 files / 1 GB).')}catch(err){await env.BUCKET.delete(key);throw err}return json({id,name,url:`/api/assets/${id}`,type:mime.split('/')[0],mime,size:bytes.byteLength},201);
+ }
+ fail(404,'Unknown endpoint or unsupported method.');
+ }catch(err){if(!err.status)console.error('Veyra API',err);return json({error:err.status?err.message:'Storage is temporarily unavailable. Your edits are preserved in the open editor.'},err.status||503)}
+}

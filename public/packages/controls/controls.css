@@ -1,0 +1,122 @@
+.vg-root,
+.vg-curve-root {
+  --vg-panel: #1b1d20;
+  --vg-border: #34363b;
+  --vg-muted: #777c86;
+  --vg-text: #ced1d6;
+  --vg-accent: #c4dfcf;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+  overflow: hidden;
+  color: var(--vg-text);
+  background: #191b1e;
+  font: 12px/1.4 Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  box-sizing: border-box;
+}
+.vg-root *, .vg-curve-root * { box-sizing: border-box; }
+.vg-root { touch-action: none; background-image: radial-gradient(circle, #373a40 .75px, transparent .85px); background-size: 22px 22px; outline: none; }
+.vg-root:focus-visible { box-shadow: inset 0 0 0 1px #7e988b; }
+.vg-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.vg-edges { position: absolute; left: 0; top: 0; overflow: visible; z-index: 0; pointer-events: none; }
+.vg-edge { pointer-events: auto; cursor: pointer; }
+.vg-edge-hit { stroke: transparent; stroke-width: 14px; pointer-events: stroke; }
+.vg-edge-line { stroke: var(--vg-edge-color, #929aaa); stroke-width: 1.5; opacity: .68; pointer-events: none; }
+.vg-edge:hover .vg-edge-line { stroke-width: 2.5; opacity: 1; }
+.vg-edge-selected .vg-edge-line { stroke: #ecf4ef; stroke-width: 2.5; opacity: 1; }
+.vg-wire-draft { stroke: #ddede3; stroke-width: 2; stroke-dasharray: 5 4; pointer-events: none; }
+.vg-node { position: absolute; left: 0; top: 0; width: 152px; height: 62px; border: 1px solid #4d5058; border-radius: 5px; background: #292c31; box-shadow: 0 3px 8px #0005; cursor: grab; z-index: 2; }
+.vg-node:hover { border-color: #777d85; background: #2d3036; }
+.vg-node.vg-selected { border-color: #dee8df; box-shadow: 0 0 0 1px #dee8df55, 0 4px 12px #0005; z-index: 3; }
+.vg-node-rail { position: absolute; top: 0; left: 5px; right: 5px; height: 3px; background: var(--vg-node-color); opacity: .85; border-radius: 0 0 2px 2px; }
+.vg-node-top { display: flex; align-items: center; gap: 8px; padding: 11px 11px 0; min-width: 0; height: 35px; }
+.vg-node-icon { display: inline-flex; flex: 0 0 19px; align-items: center; justify-content: center; width: 19px; height: 19px; border-radius: 4px; color: var(--vg-node-color); font-size: 17px; line-height: 1; font-weight: 400; }
+.vg-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 550; letter-spacing: .01em; color: #e0e1e4; }
+.vg-node-footer { height: 21px; padding: 0 11px 0 38px; display: flex; gap: 4px; align-items: center; justify-content: space-between; }
+.vg-node-type { font-size: 9px; letter-spacing: .025em; color: #949aa5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-viewer-mark { color: #aecbbe; font-size: 7px; letter-spacing: .08em; border: 1px solid #637b6f; border-radius: 2px; padding: 0 3px; line-height: 12px; font-weight: 600; }
+.vg-node.vg-disabled { opacity: .48; }
+.vg-node.vg-disabled::after { content: ''; height: 1px; position: absolute; left: 6px; right: 6px; top: 30px; transform: rotate(-19deg); background: #ced1d66b; pointer-events: none; }
+.vg-inputs { position: absolute; top: 0; left: 0; right: 0; height: 0; }
+.vg-port { position: absolute; appearance: none; padding: 0; border: 1.5px solid #979da8; border-radius: 50%; background: #202329; height: 9px; width: 9px; cursor: crosshair; z-index: 5; outline: 5px solid transparent; box-shadow: 0 1px 2px #0004; touch-action: none; }
+.vg-input { top: -5px; transform: translateX(-50%); }
+.vg-output { left: 50%; bottom: -5px; transform: translateX(-50%); border-color: var(--vg-node-color); background: var(--vg-node-color); }
+.vg-input.vg-connected { background: #abb6bc; border-color: #c4ced1; }
+.vg-port:hover, .vg-port.vg-port-drop, .vg-port.vg-port-selected { width: 11px; height: 11px; background: #e8f5ec; border-color: #f5fcf7; box-shadow: 0 0 0 4px #dcefe32b; }
+.vg-input:hover, .vg-input.vg-port-drop, .vg-input.vg-port-selected { top: -6px; }
+.vg-output:hover, .vg-output.vg-port-drop { bottom: -6px; }
+.vg-pan-ready, .vg-pan-ready .vg-node { cursor: grab; }
+.vg-panning, .vg-panning .vg-node { cursor: grabbing; }
+.vg-wiring, .vg-wiring .vg-node { cursor: crosshair; }
+.vg-selection-box { position: absolute; border: 1px solid #b2d1bd90; background: #b2d1bd10; pointer-events: none; z-index: 7; }
+.vg-hud { position: absolute; bottom: 13px; left: 14px; display: flex; align-items: center; height: 28px; padding: 2px; background: #23262ae8; border: 1px solid #3a3d43; border-radius: 5px; box-shadow: 0 2px 5px #0002; z-index: 10; }
+.vg-tool-button { display: flex; align-items: center; justify-content: center; height: 22px; min-width: 24px; padding: 0 6px; border: 0; border-radius: 3px; background: transparent; color: #aab0b8; font: inherit; cursor: pointer; }
+.vg-tool-button:hover { background: #353940; color: #eff3f0; }
+.vg-tool-button:focus-visible, .vg-menu-item:focus-visible, .vg-empty-add:focus-visible { outline: 1px solid #bcd1c3; outline-offset: -1px; }
+.vg-zoom-value { font-size: 10px; min-width: 42px; font-variant-numeric: tabular-nums; }
+.vg-fit-button { margin-left: 3px; border-left: 1px solid #3e4249; border-radius: 0; font-size: 19px; }
+.vg-hint { position: absolute; bottom: 20px; left: 166px; color: #676e78; font-size: 10px; letter-spacing: .02em; pointer-events: none; z-index: 9; }
+.vg-minimap { position: absolute; bottom: 13px; right: 14px; width: 140px; height: 82px; background: #17191ce8; border: 1px solid #353940; border-radius: 4px; cursor: crosshair; z-index: 9; }
+.vg-menu { position: absolute; width: 198px; padding: 5px; background: #282b30; border: 1px solid #494d56; border-radius: 6px; box-shadow: 0 8px 28px #0007; z-index: 30; }
+.vg-menu-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 8px; border: 0; background: transparent; color: #d0d4da; font: inherit; text-align: left; border-radius: 3px; cursor: pointer; }
+.vg-menu-item:hover { background: #3d424a; color: #fff; }
+.vg-menu-item kbd { font: inherit; font-size: 10px; color: #818994; white-space: nowrap; }
+.vg-menu-danger { color: #e4a394; }
+.vg-menu-divider { height: 1px; margin: 4px 6px; background: #42464d; }
+.vg-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: #787f89; pointer-events: none; }
+.vg-empty-mark { color: #788c80; font-size: 35px; line-height: 1.4; font-weight: 300; }
+.vg-empty strong { font-weight: 500; font-size: 14px; color: #acb4bd; }
+.vg-empty span { font-size: 11px; }
+.vg-empty-add { margin-top: 9px; padding: 6px 14px; background: #303a34; border: 1px solid #4e6456; border-radius: 4px; color: #cfdfd4; font: inherit; cursor: pointer; pointer-events: auto; }
+.vg-empty-add:hover { background: #3b4b41; }
+.vg-root [hidden], .vg-curve-root [hidden] { display: none !important; }
+
+/* Animation curves use the same small, quiet tool language as the graph. */
+.vg-curve-root { display: flex; flex-direction: column; min-height: 140px; outline: none; background: #1b1d21; }
+.vg-curve-toolbar { flex: 0 0 34px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #33363b; padding: 0 11px; }
+.vg-curve-title { font-size: 11px; font-weight: 600; color: #c7ccd2; }
+.vg-curve-node-name { font-size: 10px; color: #777f8a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.vg-curve-add { display: inline-flex; align-items: center; gap: 5px; height: 23px; padding: 0 8px; border: 1px solid #454b53; border-radius: 4px; background: #2b3035; color: #c2cbd3; font: inherit; font-size: 10px; cursor: pointer; white-space: nowrap; }
+.vg-curve-add:hover { border-color: #748579; color: #e0ebe3; }
+.vg-curve-add:disabled { opacity: .4; cursor: default; }
+.vg-curve-body { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.vg-curve-tracks { width: 152px; flex: 0 0 152px; overflow: auto; padding: 8px 6px; border-right: 1px solid #33363b; background: #1f2226; scrollbar-width: thin; scrollbar-color: #424750 transparent; }
+.vg-curve-track { width: 100%; min-height: 29px; display: flex; align-items: center; gap: 7px; padding: 4px 6px; cursor: pointer; border: 1px solid transparent; background: transparent; color: #919aa6; border-radius: 4px; font: inherit; font-size: 11px; text-align: left; }
+.vg-curve-track:hover { background: #2c3036; color: #c3cbd2; }
+.vg-curve-track.vg-active { background: #333a3b; color: #d7e3de; border-color: #4a5652; }
+.vg-curve-track-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; border: 1px solid var(--vg-track-color); background: transparent; }
+.vg-curve-track.vg-visible .vg-curve-track-dot { background: var(--vg-track-color); }
+.vg-curve-track-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-curve-track-count { color: #6e7885; font-size: 9px; font-variant-numeric: tabular-nums; }
+.vg-curve-track-empty { color: #747c88; font-size: 10px; line-height: 1.6; padding: 7px; }
+.vg-curve-stage { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; touch-action: none; }
+.vg-curve-svg { display: block; width: 100%; height: 100%; }
+.vg-curve-grid { stroke: #34383e; stroke-width: 1; }
+.vg-curve-grid.vg-minor { stroke: #2a2e34; stroke-width: .75; }
+.vg-curve-axis { fill: #75808e; font: 9px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-variant-numeric: tabular-nums; }
+.vg-curve-zero { stroke: #4c535b; stroke-width: 1; }
+.vg-curve-line { fill: none; stroke-width: 1.6; opacity: .86; pointer-events: none; }
+.vg-curve-baseline { stroke-width: 1; stroke-dasharray: 4 5; opacity: .45; }
+.vg-curve-key { cursor: move; stroke: #1c1f24; stroke-width: 2; }
+.vg-curve-key:hover, .vg-curve-key.vg-selected { stroke: #f4f8f4; stroke-width: 1.5; }
+.vg-curve-frame { stroke: #d8b96f; stroke-width: 1; opacity: .85; pointer-events: none; }
+.vg-curve-frame-label { fill: #1c2024; font: 9px Inter, sans-serif; font-weight: 600; text-anchor: middle; pointer-events: none; }
+.vg-curve-footer { min-height: 31px; flex: 0 0 31px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border-top: 1px solid #33363b; background: #202327; color: #76808c; font-size: 10px; }
+.vg-curve-footer input, .vg-curve-footer select { color: #bfc8d0; background: #171a1e; border: 1px solid #3b424c; border-radius: 3px; height: 21px; font: 10px Inter, sans-serif; outline: none; padding: 1px 5px; }
+.vg-curve-footer input:focus, .vg-curve-footer select:focus { border-color: #8aab97; }
+.vg-curve-footer input { width: 55px; }
+.vg-curve-footer select { width: 70px; }
+.vg-curve-footer label { display: inline-flex; align-items: center; gap: 5px; }
+.vg-curve-footer-hint { margin-left: auto; color: #68727e; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vg-curve-delete { border: 0; padding: 0 5px; background: transparent; color: #b48d84; cursor: pointer; font-size: 14px; }
+.vg-curve-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: #727c88; pointer-events: none; font-size: 11px; }
+.vg-curve-empty strong { color: #9ba7b4; font-weight: 500; }
+@media (max-width: 600px) {
+  .vg-hint { display: none; }
+  .vg-minimap { width: 112px; height: 65.6px; }
+  .vg-curve-tracks { width: 120px; flex-basis: 120px; }
+  .vg-curve-footer-hint { display: none; }
+}

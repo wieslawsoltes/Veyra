@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+/** Local-only runnable app. Node >=22.13. No dependency install required. */
+import http from 'node:http';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile,readdir,mkdir,writeFile,unlink,stat} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import {handleAPI} from '../server/api.js';
+const root=fileURLToPath(new URL('..',import.meta.url)),dataDir=path.join(root,'.veyra-data');
+await mkdir(path.join(dataDir,'media'),{recursive:true});
+const db=new DatabaseSync(path.join(dataDir,'projects.sqlite'));db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;');db.exec('CREATE TABLE IF NOT EXISTS _local_migrations (name TEXT PRIMARY KEY)');
+for(const name of (await readdir(path.join(root,'drizzle'))).filter(n=>n.endsWith('.sql')).sort()){if(!db.prepare('SELECT name FROM _local_migrations WHERE name=?').get(name)){db.exec('BEGIN');try{db.exec(await readFile(path.join(root,'drizzle',name),'utf8'));db.prepare('INSERT INTO _local_migrations VALUES(?)').run(name);db.exec('COMMIT')}catch(e){db.exec('ROLLBACK');throw e}}}
+class Statement{constructor(sql,values=[]){this.sql=sql;this.values=values}bind(...v){return new Statement(this.sql,v)}async first(){return db.prepare(this.sql).get(...this.values)||null}async all(){return {results:db.prepare(this.sql).all(...this.values)}}async run(){const r=db.prepare(this.sql).run(...this.values);return {meta:{changes:Number(r.changes)}}}}
+const env={LOCAL_DEVELOPMENT:true,DB:{prepare(sql){return new Statement(sql)},async batch(statements){db.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());db.exec('COMMIT');return results}catch(e){db.exec('ROLLBACK');throw e}}},BUCKET:{async put(key,bytes){const p=path.join(dataDir,'media',key);await mkdir(path.dirname(p),{recursive:true});await writeFile(p,new Uint8Array(bytes))},async get(key,options={}){try{const bytes=await readFile(path.join(dataDir,'media',key));return {body:options.range?bytes.subarray(options.range.offset,options.range.offset+options.range.length):bytes}}catch{return null}},async delete(key){await unlink(path.join(dataDir,'media',key)).catch(()=>{})}}};
+const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png','.json':'application/json','.webm':'video/webm'};
+if(process.argv.includes('--check')){console.log('Local runtime initialized: SQLite schema and persistent media directory are ready.');db.close();process.exit(0);}
+const port=Number(process.env.PORT)||3000;
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,`http://127.0.0.1:${port}`);if(url.pathname.startsWith('/api/')){const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>51*1024*1024){res.writeHead(413);res.end('File too large');req.destroy();return;}chunks.push(chunk)}const request=new Request(url,{method:req.method,headers:req.headers,body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});const response=await handleAPI(request,env);res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;}const requested=decodeURIComponent(url.pathname==='/'?'/studio.html':url.pathname);const file=path.resolve(root,'public','.'+requested);if(!file.startsWith(path.join(root,'public')+path.sep)){res.writeHead(403);return res.end('Forbidden')}const bytes=await readFile(file);res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','X-Content-Type-Options':'nosniff'});res.end(bytes);}catch(e){res.writeHead(e.code==='ENOENT'?404:500);res.end(e.code==='ENOENT'?'Not found':'Local server error');console.error(e.message)}});
+server.listen(port,'127.0.0.1',()=>console.log(`Veyra Studio: http://127.0.0.1:${port}\nLocal single-user mode. SQLite and media persist in .veyra-data/.`));
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(()=>{db.close();process.exit(0)}));

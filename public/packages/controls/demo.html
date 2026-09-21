@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Veyra controls preview</title><link rel="stylesheet" href="./controls.css"><style>
+html,body{margin:0;background:#111315;color:#d3d9dc;font-family:Arial,sans-serif} main{width:1040px;margin:24px auto;border:1px solid #343940;border-radius:8px;overflow:hidden} header{height:39px;display:flex;align-items:center;gap:24px;padding:0 16px;font-size:11px;background:#25282d;border-bottom:1px solid #373c42} header strong{font-weight:500;color:#dae4dd} header span{color:#707985} #graph{height:480px} #curve{height:245px;border-top:1px solid #3a3d43} aside{max-width:1040px;margin:0 auto;font-size:11px;color:#707985;line-height:1.6}
+</style></head><body><main><header><strong>Node graph</strong><span>Composition 01</span><span>12 nodes</span></header><div id="graph"></div><div id="curve"></div></main><aside>Middle-drag to pan · Wheel to zoom · Shift-click for multiple selection · Tab to add · Double-click a node to view</aside><script type="module">
+import {NodeGraph} from './graph.js';
+import {CurveEditor} from './curve-editor.js';
+const nodes = [
+{id:'plate',type:'Source',name:'City plate',x:70,y:35,inputs:[],params:{}},
+{id:'grade',type:'Grade',name:'Warm highlights',x:70,y:155,inputs:['plate'],params:{exposure:.25,contrast:1.1,saturation:.85},keyframes:{exposure:[{frame:1,value:.05,interpolation:'smooth'},{frame:60,value:.85,interpolation:'smooth'},{frame:120,value:.25,interpolation:'linear'}],saturation:[{frame:1,value:.4,interpolation:'linear'},{frame:120,value:1,interpolation:'linear'}]}},
+{id:'glow',type:'Glow',name:'Halation',x:70,y:275,inputs:['grade'],params:{intensity:.4}},
+{id:'cloud',type:'Source',name:'Cloud texture',x:310,y:35,inputs:[],params:{}},
+{id:'transform',type:'Transform',name:'Reframe sky',x:310,y:155,inputs:['cloud'],params:{scale:1}},
+{id:'roto',type:'Roto',name:'Sky matte',x:545,y:35,inputs:[],params:{}},
+{id:'blur',type:'Blur',name:'Soft edge',x:545,y:155,inputs:['roto'],params:{radius:8}},
+{id:'merge',type:'Merge',name:'Over sky',x:310,y:275,inputs:['glow','transform','blur'],params:{mix:1}},
+{id:'noise',type:'Noise',name:'Film grain',x:785,y:35,inputs:[],params:{intensity:.2}},
+{id:'mix',type:'Merge',name:'Texture mix',x:785,y:155,inputs:['noise',null],params:{mix:.2}},
+{id:'vignette',type:'Vignette',name:'Finish',x:785,y:275,inputs:['mix'],params:{amount:.2}},
+{id:'viewer',type:'Viewer',name:'Viewer 1',x:310,y:395,inputs:['merge'],params:{}}
+];
+let selection=['grade']; let viewer='merge';
+const events=[];
+function record(type, detail) {events.push({type,detail})}
+function sync(){graph.setData(nodes,selection,viewer)}
+const graph = new NodeGraph(document.querySelector('#graph'),{
+onSelect(ids){selection=ids;record('select',ids);sync()},
+onMove(positions){for(const pos of positions)Object.assign(nodes.find(n=>n.id===pos.id),pos);record('move',positions);sync()},
+onConnect(source,target,index){nodes.find(n=>n.id===target).inputs[index]=source;record('connect',{source,target,index});sync()},
+onDisconnect(target,index){nodes.find(n=>n.id===target).inputs[index]=null;record('disconnect',{target,index});sync()},
+onDelete(ids){for(const id of ids){let index=nodes.findIndex(n=>n.id===id);if(index>=0)nodes.splice(index,1)}record('delete',ids);sync()},
+onView(id){viewer=id;record('view',id);sync()},
+onAdd(point){record('add',point)}
+});
+const curve=new CurveEditor(document.querySelector('#curve'),{onChange(keys){nodes.find(n=>n.id==='grade').keyframes=keys;record('keyframes',keys);curve.setData(nodes.find(n=>n.id==='grade'),42)}});
+sync();curve.setData(nodes.find(n=>n.id==='grade'),42);
+window.qa={graph,curve,nodes,events,sync};
+</script></body></html>

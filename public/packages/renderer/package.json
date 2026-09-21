@@ -1,0 +1,19 @@
+{
+  "name": "@veyra/compositor",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./renderer.js",
+    "./utils": "./utils.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT",
+  "files": [
+    "*.js",
+    "*.css",
+    "README.md",
+    "demo.html"
+  ]
+}
