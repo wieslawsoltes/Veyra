@@ -1,0 +1,27 @@
+name: Check original Veyra source
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/check-original-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Attempt authenticated-free read of the original source repository
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          git clone --depth=1 --branch main https://git.chatgpt-team.site/68d42725-37d6-4128-a78b-83c4c7ae6c20/appgprj_6aa86efa10e88191844dffebe7e226dc.git original-source
+          git -C original-source rev-parse HEAD
+          git -C original-source archive --format=tar HEAD | xz > original-source.tar.xz
+          sha256sum original-source.tar.xz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-source-recovered
+          path: original-source.tar.xz
+          if-no-files-found: error
+          retention-days: 7
