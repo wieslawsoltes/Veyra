@@ -1,0 +1,48 @@
+name: Prepare source transport alphabet
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/prepare-word-transport.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 -m pip install tiktoken==0.12.0
+      - name: Generate deterministic compact alphabet
+        shell: python
+        run: |
+          import hashlib, json, pathlib, re, tiktoken
+          encoder = tiktoken.get_encoding('o200k_base')
+          words = []
+          for index in range(encoder.n_vocab):
+              try:
+                  value = encoder.decode_single_token_bytes(index)
+              except KeyError:
+                  continue
+              if re.fullmatch(rb' [A-Za-z]{2,20}', value):
+                  words.append(value.decode('ascii')[1:])
+          assert len(words) == len(set(words))
+          prime = 32749 if len(words) >= 32749 else 16381
+          assert len(words) >= prime
+          root = pathlib.Path('.source-import')
+          root.mkdir(exist_ok=True)
+          data = (json.dumps({'prime':prime, 'words':words[:prime]}, separators=(',', ':'))+'\n').encode()
+          (root / 'words.json').write_bytes(data)
+          print('Available words:', len(words), 'Prime:', prime, 'SHA256:', hashlib.sha256(data).hexdigest())
+      - name: Preserve transport alphabet
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .source-import/words.json
+          git diff --cached --quiet || git commit -m 'build: retain deterministic alphabet for exact source transfer'
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-transport-alphabet
+          path: .source-import/words.json
+          include-hidden-files: true
+          retention-days: 7
