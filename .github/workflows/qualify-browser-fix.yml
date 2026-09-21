@@ -30,11 +30,11 @@ jobs:
           test = pathlib.Path('tests/browser-pages.py')
           text = test.read_text()
           old = "browser = p.chromium.launch(executable_path=executable, headless=True,\n                args=['--no-sandbox', '--enable-unsafe-webgpu', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])"
-          new = "browser = p.chromium.launch(executable_path=executable, channel='chromium' if args.managed_browser else None, headless=True,\n                args=['--no-sandbox', '--enable-unsafe-webgpu', '--enable-features=Vulkan',\n                      '--use-angle=vulkan', '--use-vulkan=swiftshader',\n                      '--use-webgpu-adapter=swiftshader', '--disable-vulkan-surface'])"
+          new = "# Match Chromium's VulkanSwiftShader pixel-test backend, including ANGLE.\n            browser = p.chromium.launch(executable_path=executable, channel='chromium' if args.managed_browser else None, headless=True,\n                args=['--no-sandbox', '--enable-unsafe-webgpu', '--enable-unsafe-swiftshader',\n                      '--enable-features=Vulkan,UseSkiaRenderer', '--use-angle=swiftshader',\n                      '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader',\n                      '--disable-vulkan-surface'])"
           assert text.count(old) == 1
           text = text.replace(old, new)
           old = '            before = page.evaluate(frame_digest)\n            if args.screenshot:\n                page.screenshot(path=args.screenshot, full_page=True)'
-          new = "            if args.screenshot:\n                page.screenshot(path=args.screenshot, full_page=True)\n            print(json.dumps(page.evaluate('({backend: veyra.renderer.backend, adapter: veyra.renderer._gpu?.adapter.info, lost: veyra.renderer._lost?.message, error: document.getElementById(\"viewer-error\").textContent})')), flush=True)\n            before = page.evaluate(frame_digest)"
+          new = "            if args.screenshot:\n                page.screenshot(path=args.screenshot, full_page=True)\n            print(json.dumps(page.evaluate('({backend: veyra.renderer.backend, adapter: {vendor: veyra.renderer._gpu?.adapter.info.vendor, device: veyra.renderer._gpu?.adapter.info.device, description: veyra.renderer._gpu?.adapter.info.description}, lost: veyra.renderer._lost?.message, error: document.getElementById(\"viewer-error\").textContent})')), flush=True)\n            assert page.evaluate('veyra.renderer.backend') == 'WebGPU', 'This gate must exercise WebGPU, not the Canvas fallback'\n            before = page.evaluate(frame_digest)"
           assert text.count(old) == 1
           text = text.replace(old, new)
           test.write_text(text)
