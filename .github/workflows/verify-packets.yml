@@ -5,6 +5,7 @@ on:
     paths:
       - '.source-import/retry-*.txt'
       - '.source-import/verify_packets.py'
+      - '.source-import/corrections.json'
       - '.github/workflows/verify-packets.yml'
   workflow_dispatch:
 permissions:
@@ -18,6 +19,21 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+      - name: Apply explicit source-line retransmissions
+        shell: python
+        run: |
+          import json, pathlib, re
+          root = pathlib.Path('.source-import')
+          corrections = root / 'corrections.json'
+          for name, replacements in json.loads(corrections.read_text()).items() if corrections.exists() else []:
+              assert re.fullmatch(r'retry-\d{3}\.txt', name)
+              path = root / name
+              lines = path.read_text().splitlines()
+              for index, replacement in replacements.items():
+                  i = int(index)
+                  assert 0 <= i < len(lines) and int(replacement.split()[0]) == i
+                  lines[i] = replacement
+              path.write_text('\n'.join(lines) + '\n')
       - name: Recover only exact original source bytes
         env:
           GH_TOKEN: ${{ github.token }}
