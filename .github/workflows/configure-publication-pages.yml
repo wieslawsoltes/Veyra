@@ -1,0 +1,49 @@
+name: Configure Veyra Pages publishing
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/configure-publication-pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify Pages configuration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: python
+        run: |
+          import json, os, pathlib, urllib.request, urllib.error
+          repository = os.environ['REPOSITORY']
+          assert repository == 'wieslawsoltes/Veyra'
+          url = 'https://api.github.com/repos/' + repository + '/pages'
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
+          def request(method, body=None):
+              data = None if body is None else json.dumps(body).encode()
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  print('Pages API status:', error.code, error.read().decode())
+                  raise
+          page = request('GET')
+          print('Existing Pages build type:', page.get('build_type'))
+          if page.get('build_type') != 'workflow':
+              request('PUT', {'build_type': 'workflow'})
+              page = request('GET')
+          report = {'repository': repository, 'build_type': page.get('build_type'), 'url': page.get('html_url'), 'status': page.get('status'), 'https_enforced': page.get('https_enforced')}
+          pathlib.Path('pages-configuration.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report, indent=2))
+          assert page.get('build_type') == 'workflow', 'Pages must accept workflow artifacts'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pages-configuration
+          path: pages-configuration.json
+          retention-days: 7
