@@ -56,3 +56,35 @@ Added a dependency-free static build, nested project-base URL rewriting, an Inde
 Preparation verification: 78 Node test cases and the existing 28 graph/curve DOM/state assertions pass; SQLite startup and JavaScript syntax checks pass. Browser execution in the preparation container was blocked by an administrator URL policy; no policy was changed. The new GitHub-hosted browser suite is a required publication gate. Check the actual Actions results for its status; adding a test is not proof that it passed. Headless software rendering is not physical-GPU testing.
 
 See `GITHUB-PAGES.md` for local-storage lifetime, media portability, collaboration, quota and deployment-permission boundaries.
+
+
+## Recovery and publishing validation (2026-09-20)
+
+The complete 149-file prepared source archive was recovered. The current local
+suite passes **93 Node test cases** and **28 control DOM/state assertions**. The
+15 additional tests cover manifest checks, path safety, corrupted source,
+symlinks, remote-baseline protection, preservation of unrelated files, and Pages
+workflow configuration. SQLite startup and the nested `/Veyra/` static build pass.
+
+A real Chromium navigation was attempted, but the browser returned
+`net::ERR_BLOCKED_BY_ADMINISTRATOR` for the local test URL. The policy was not
+modified or bypassed. No browser-pass, GPU-execution or visual-QA claim follows
+from this attempt. Both workflows retain the browser test as a mandatory gate
+and now install their matching Playwright-managed Chromium explicitly.
+
+No new source commit or Pages deployment was written to GitHub in this recovery
+session. The publication helper's pure file/validation operations are tested;
+its authenticated GitHub write and end-to-end deployment path remain unexecuted.
+The target Pages URL is not proof of publication. See `release/verification.json`
+for machine-readable results and `release/source-manifest.json` for source hashes.
+
+## GitHub source recovery (2026-09-21)
+
+All 58 source blocks passed their original Git hashes and the assembled archive
+passed SHA-256 verification. The complete application was committed as
+`f42fa06a16e555c560cfd36773dedde5c4cd161a`. The prepared publisher and its 15
+regression tests are retained. The earlier no-write and browser-policy notes
+above describe the September 20 preparation session, not current GitHub access.
+CI and Pages run the managed Chromium checks as mandatory gates. Consult their
+actual results for browser and live-publication status. Headless software
+rendering is not physical-GPU or production-scale qualification.

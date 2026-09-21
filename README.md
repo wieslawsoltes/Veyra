@@ -6,6 +6,11 @@
 - GitHub Pages address: [wieslawsoltes.github.io/Veyra/](https://wieslawsoltes.github.io/Veyra/).
 - Build without dependencies: `npm run build:pages`. Run the original SQLite-backed app with `node standalone/server.mjs`.
 
+To publish the complete recovered source from an authenticated development machine,
+run `node scripts/publish-github.mjs`. It preserves the repository's existing
+history, checks source hashes and tests, and verifies the actual Pages deployment.
+See [publishing instructions](docs/GITHUB-PAGES.md#publish-the-recovered-complete-source).
+
 **Pages runs in browser-local mode.** Projects, imported media, snapshots and review notes persist in IndexedDB on the current device. Multi-tab revision conflicts are protected, but multi-user invitations and server-backed collaboration require the backend. Export backups and retain original media; clearing site data removes browser-local storage. See [the Pages deployment and verification guide](docs/GITHUB-PAGES.md).
 
 The source below also documents the original hosted/server deployment. Its cloud features are not claims about the static Pages edition.

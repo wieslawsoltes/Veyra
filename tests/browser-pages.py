@@ -17,6 +17,7 @@ PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4
 parser = argparse.ArgumentParser()
 parser.add_argument('--url', default=None, help='Test an already deployed site instead of the local dist-pages build.')
 parser.add_argument('--screenshot', default=None)
+parser.add_argument('--managed-browser', action='store_true', help='Use the Chromium version installed by Playwright, not a system browser.')
 args = parser.parse_args()
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -35,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='veyra-pages-') as temporary:
         url = f'http://127.0.0.1:{server.server_address[1]}/Veyra/'
     try:
         with sync_playwright() as p:
-            executable = os.environ.get('CHROME_BIN') or shutil.which('chromium') or shutil.which('google-chrome')
+            executable = None if args.managed_browser else (os.environ.get('CHROME_BIN') or shutil.which('chromium') or shutil.which('google-chrome'))
             browser = p.chromium.launch(executable_path=executable, headless=True,
                 args=['--no-sandbox', '--enable-unsafe-webgpu', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
             context = browser.new_context(viewport={'width': 1440, 'height': 1000})

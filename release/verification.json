@@ -1,0 +1,26 @@
+{
+  "date": "2026-09-21",
+  "repository": "wieslawsoltes/Veyra",
+  "original_archive": {
+    "name": "veyra-final.tar.xz",
+    "entries": 149,
+    "bytes": 710984,
+    "verified_blocks": 58,
+    "sha256": "dfa73760f113cb3c76bc8dbfed35fde078acdc1eb49e846b7499a7ea1774a5fd"
+  },
+  "source_import": {
+    "status": "succeeded",
+    "commit": "f42fa06a16e555c560cfd36773dedde5c4cd161a",
+    "workflow_run": 35598721142
+  },
+  "prepared_source_validation": {
+    "node_tests_passed": 93,
+    "control_assertions_passed": 28,
+    "sqlite_startup": "passed",
+    "static_build": "passed"
+  },
+  "browser_and_live_publication": "Required gates in .github/workflows/pages.yml; inspect the run for this commit",
+  "storage": "browser-local IndexedDB on Pages; server backend retained separately",
+  "cli_publisher_end_to_end": "not_executed",
+  "hardware_gpu_testing": "not_performed"
+}
